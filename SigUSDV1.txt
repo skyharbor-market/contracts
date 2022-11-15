@@ -1,0 +1,61 @@
+Title: SigUSD V1 Contract
+
+P2S: qNtfov7o2g1GYShDaD4a1QNv1bSjEXAbnWzVJQA7qVYogTFuxuw659G1WWwonQqA91AsYa9vL7JQLysRvMyNdZ6iLHH5mgx5RKn6tEE5uki3MPNg5cVrnG9rhZuKA3CpyaMbBBus7fxoYQsHgLCShaqJEyjFZsKooWqVJ1nFQeo9hiTCLcWd91B4EeWzrimYswG4cPaJyBwQp9eit1Hq1UtZ8dwo3r7vKsH7aJLzZbq6mky4itWHKueA4bybDQfPwYXoujsChY5jawj6V1YQrrVbzdxm66pBSfCdzr76nWp5VdnPJXbvnN6tHpv2Taivs23JJBPakAeDSpX1TuYx7Ce5KYHutTczNcytPQgbetWXNxTKzDsmzLbEX1bsWdryJnJT5bUHUXEEacWmz6JgUaKRbrJwWNgrpH5V3t6nvUgpZFpwQnNLYnLQs4tVHch3DeifD3f7BX4s5E3qArtDkNMPsY6AgUPd6kLNbfRvyZPf2RDA2CXn9ABmnKmTZdJYfc2bLHG1H7igeBH4g5Tok5fkjux6L8T8Pf7jBiV6WYRjD4y8E6idTTWrBJ9vvPJURnFD6L8jp2f3xt6HvKD1bokKUZyeTiu9hmFm3s9TE8x7ztCXeYUiJq7Lm4FzFsXkyqKgGDRSXXGmqDpwaWSdtH9Pn43kLWr8hRoMkAm1f9e6nhJQfCRu8wAK3Zv74vRfq
+
+
+Script:
+`
+
+//// LIST NFT GUARD SCRIP ////
+
+/* //// Register Details ////
+SELF.R4(Long) : Sale price in nanoErg
+SELF.R5(Raw Address) : Seller Receive Address
+SELF.R6(Box) : NFT issuer box
+SELF.R7(GroupElement) : Public Key of Seller
+OUTPUTS(0).R4(Coll[Bytes]) : Sale Identifier */
+
+{
+if (OUTPUTS.size > 2) { 
+// Purchase Conditions //
+val currency = fromBase58("GYATox71P9XAERmzoDdTGELa62f5ALyjxJLRSfJfKsh")
+val serviceGets = max((SELF.R4[Long].get / 50),1L)
+val royaltyBox = SELF.R6[Box].get
+val purchaseNFT = if (royaltyBox.R4[Int].isDefined) {
+// Royalty Applied //
+val royalty = royaltyBox.R4[Int].get
+val royaltyGets = if(royalty != 0) {max((SELF.R4[Long].get * royalty / 1000),1L)} else {0L} // royaltyBox.R4 is royalty percentage * 1000
+val sellerGets = SELF.R4[Long].get - serviceGets - royaltyGets
+allOf(Coll(
+OUTPUTS(0).tokens(0)._2 >= sellerGets, 
+OUTPUTS(0).tokens(0)._1 == currency,
+OUTPUTS(0).propositionBytes == SELF.R5[Coll[Byte]].get, // Seller Address
+OUTPUTS(0).R4[Coll[Byte]].get == SELF.id, // Unique Identifier to prevent same-price attack
+OUTPUTS(1).tokens(0)._1 == currency,
+OUTPUTS(1).tokens(0)._2 >= serviceGets,
+OUTPUTS(1).propositionBytes == fromBase58("1sw5t6iJRxzSjNGvSRw8kcaTADxEG52wGMVgSjdXPLMbhvUM"), // Service Address
+OUTPUTS(2).tokens(0)._1 == currency,
+if (royaltyGets != 0) {OUTPUTS(2).tokens(0)._2 >= royaltyGets && OUTPUTS(2).propositionBytes == royaltyBox.propositionBytes} else{true}, // pay royalty if non-zero
+royaltyBox.id == SELF.tokens(0)._1)) // Forces royalty to be paid to issuer
+} else {
+// Non-royalty sale (royaltyBox.R4 not defined)
+val sellerGets = SELF.R4[Long].get - serviceGets
+allOf(Coll(
+OUTPUTS(0).tokens(0)._2 >= sellerGets, 
+OUTPUTS(0).tokens(0)._1 == currency,
+OUTPUTS(0).propositionBytes == SELF.R5[Coll[Byte]].get, // Seller Address
+OUTPUTS(0).R4[Coll[Byte]].get == SELF.id, // Unique Identifier to prevent same-price attack
+OUTPUTS(1).tokens(0)._1 == currency,
+OUTPUTS(1).tokens(0)._2 >= serviceGets, 
+OUTPUTS(1).propositionBytes == fromBase58("1sw5t6iJRxzSjNGvSRw8kcaTADxEG52wGMVgSjdXPLMbhvUM"),// Service Address
+royaltyBox.id == SELF.tokens(0)._1)) // Forces royalty to be paid to issuer
+}
+sigmaProp(purchaseNFT) } else {
+// Refund Condition (OUTPUT size == 2)
+val pubKey = SELF.R7[GroupElement].get
+proveDlog(pubKey)
+}
+}
+
+`
+
